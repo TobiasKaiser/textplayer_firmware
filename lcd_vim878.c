@@ -12,19 +12,30 @@ uint16_t display_digits[8];
  *******************************************************/
 // columns: parts (col0: DEFCA, col1: LKJI, col2: DPCBA, col3: MNGH), rows: digits 1...8
 uint8_t digit_addrs[8][4]={
-	{	38,	39,	0,	1	},
-	{	36,	37,	2,	3	},
-	{	34,	35,	4,	5	},
-	{	32,	25,	6,	7	},
-	{	22,	23,	8,	9	},
-	{	20,	21,	10,	11	},
-	{	18,	19,	12,	13	},
-	{	16, 17,	14,	15	}
+	{	24,	27,	22,	25	},
+	{	26,	29,	20,	23	},
+	{	28,	31,	18,	21	},
+	{	30,	33,	16,	19	},
+	{	6,	7,	14,	17	},
+	{	4,	5,	12,	15	},
+	{	2,	3,	10,	13	},
+	{	0,	1,	8,	11	}
+/*
+	{	25,	26,	23,	24	},
+	{	27,	28,	21,	22	},
+	{	29, 30,	19,	20	},
+	{	31,	32,	17,	18	},
+	{	7,	6,	15,	16	},
+	{	5,	4,	13,	14	},
+	{	3,	2,	11,	12	},
+	{	1,	0,	9,	10	}
+*/
 };
 
 /*******************************************************
  * 14 SEGMENT LCD "FONT"
  *******************************************************/
+
 #define D_D  (1<<3)
 #define D_E  (1<<2)
 #define D_F ( 1<<1)
@@ -115,6 +126,22 @@ void lcd_vim878_update(void)
 
 }
 
+void lcd_vim878_update_singleseg(int byte, int bit)
+{
+	uint8_t msg[3+20];
+	uint8_t *display_mem=msg+3;
+	msg[0]=SLAVE_ADDR;
+	// We need to select the device (else the device will not feel responsible for the )
+	msg[1]=CMD_OPCODE_DEVICE_SELECT | 0 | CMD_CONTINUE;
+	msg[2]=CMD_OPCODE_LOAD_DATA_POINTER | 0;
+
+	memset(display_mem, 0, 20);
+
+	display_mem[byte]=(1<<bit);
+	i2c_master_sendmsg(msg, 20+3);
+
+}
+
 void lcd_vim878_init(void)
 {
 
@@ -129,7 +156,39 @@ void lcd_vim878_init(void)
 void lcd_vim878_test(void)
 {
 
+
 	int i, j;
+
+	/*
+	char text[]="HELLOXY ";
+	for(j=0;j<8;j++) {
+		char c=text[j];
+		if(c>='A' && c<='Z') {
+			display_digits[j]=alpha[c-'A'];
+		} else {
+			display_digits[j]=0;
+		}
+	}
+
+	while(1) {
+		lcd_vim878_update();
+		_delay_ms(250);
+	}
+	*/
+
+		/*
+	while(1) {
+		int i, j;
+		for(i=0;i<20;i++) {
+			for(j=0;j<8;j++) {
+				lcd_vim878_update_singleseg(i, j);
+
+				_delay_ms(250);
+
+			}
+		}
+	}
+	*/
 
 	char limerick[]="THERE WAS A YOUNG LADY FROM CORK WHOSE DAD MADE A FORTUNE IN PORK HE BOUGHT FOR HIS DAUGHTER A TUTOR WHO TAUGHT HER TO BALANCE GREEN PEAS ON HER FORK";
 	while(1) {

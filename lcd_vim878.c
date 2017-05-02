@@ -1,11 +1,12 @@
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "i2c_master.h"
 #include "lcd_ctrl_pcf85176t.h"
 #include "delay.h"
 
-uint16_t display_digits[8];
+uint16_t lcd_vim878_digits[8];
 
 /*******************************************************
  * DRIVER <-> LCD CONNECTION TABLE
@@ -114,7 +115,7 @@ void lcd_vim878_update(void)
 	for(i=0;i<8;i++) {
 		//uint8_t col[4];
 		for(j=0;j<4;j++) {
-			uint8_t nibble=(display_digits[i]>>(4*j))&0xf;
+			uint8_t nibble=(lcd_vim878_digits[i]>>(4*j))&0xf;
 			uint8_t nibbleaddr=digit_addrs[i][j];
 			uint8_t byteaddr=nibbleaddr>>1;
 			nibbleaddr&=1;
@@ -126,25 +127,8 @@ void lcd_vim878_update(void)
 
 }
 
-void lcd_vim878_update_singleseg(int byte, int bit)
-{
-	uint8_t msg[3+20];
-	uint8_t *display_mem=msg+3;
-	msg[0]=SLAVE_ADDR;
-	// We need to select the device (else the device will not feel responsible for the )
-	msg[1]=CMD_OPCODE_DEVICE_SELECT | 0 | CMD_CONTINUE;
-	msg[2]=CMD_OPCODE_LOAD_DATA_POINTER | 0;
-
-	memset(display_mem, 0, 20);
-
-	display_mem[byte]=(1<<bit);
-	i2c_master_sendmsg(msg, 20+3);
-
-}
-
 void lcd_vim878_init(void)
 {
-
 	uint8_t init_msg[]={
 		SLAVE_ADDR,
 		CMD_OPCODE_MODE_SET|CMD_MODE_SET_ENABLE|CMD_MODE_SET_THIRD_BIAS|CMD_MODE_SET_4_BP
@@ -155,40 +139,7 @@ void lcd_vim878_init(void)
 
 void lcd_vim878_test(void)
 {
-
-
 	int i, j;
-
-	/*
-	char text[]="HELLOXY ";
-	for(j=0;j<8;j++) {
-		char c=text[j];
-		if(c>='A' && c<='Z') {
-			display_digits[j]=alpha[c-'A'];
-		} else {
-			display_digits[j]=0;
-		}
-	}
-
-	while(1) {
-		lcd_vim878_update();
-		_delay_ms(250);
-	}
-	*/
-
-		/*
-	while(1) {
-		int i, j;
-		for(i=0;i<20;i++) {
-			for(j=0;j<8;j++) {
-				lcd_vim878_update_singleseg(i, j);
-
-				_delay_ms(250);
-
-			}
-		}
-	}
-	*/
 
 	char limerick[]="THERE WAS A YOUNG LADY FROM CORK WHOSE DAD MADE A FORTUNE IN PORK HE BOUGHT FOR HIS DAUGHTER A TUTOR WHO TAUGHT HER TO BALANCE GREEN PEAS ON HER FORK";
 	while(1) {
@@ -196,9 +147,9 @@ void lcd_vim878_test(void)
 			for(j=0;j<8;j++) {
 				char c=limerick[i+j];
 				if(c>='A' && c<='Z') {
-					display_digits[j]=alpha[c-'A'];
+					lcd_vim878_digits[j]=alpha[c-'A'];
 				} else {
-					display_digits[j]=0;
+					lcd_vim878_digits[j]=0;
 				}
 			}
 			lcd_vim878_update();
@@ -206,6 +157,106 @@ void lcd_vim878_test(void)
 		}
 		_delay_ms(3000);
 	}
+}
+
+void lcd_vim878_puts(char *str)
+{
+	bool flag_apostrophe=false;
+	bool last_inc_skipped=false;
+	bool string_end_reached=false;
+
+	memset(lcd_vim878_digits, 0, 8*sizeof(uint16_t));
+
+	int char_idx=0;
+	while(char_idx<8) {
+		char c = *(str++);
+		if(c=='\0') {
+			string_end_reached=true;
+			break;
+		}
+		else if(c>='A' && c<='Z') {
+			lcd_vim878_digits[char_idx] |= alpha[c-'A'];
+			char_idx++;
+			last_inc_skipped=false;
+			flag_apostrophe=false;
+		}
+		else if(c>='a' && c<='z') {
+			lcd_vim878_digits[char_idx] |= alpha[c-'a'];
+			char_idx++;
+			last_inc_skipped=false;
+			flag_apostrophe=false;
+		}
+		else if(c>='0' && c<='9') {
+			lcd_vim878_digits[char_idx] |= nums[c-'0'];
+			char_idx++;
+			last_inc_skipped=false;
+			flag_apostrophe=false;
+		}
+		else if(c=='.' || c==',') {
+			if(char_idx==0) {
+				// We have to leave out the first digit here then
+				char_idx++;
+			}
+			if(last_inc_skipped) {
+				char_idx++;
+			}
+			lcd_vim878_digits[char_idx - 1] |= D_DP;
+
+			last_inc_skipped=true;
+			flag_apostrophe=false;
+		}
+		else if(c=='\'') {
+			if(last_inc_skipped) {
+				char_idx++;
+			}
+			lcd_vim878_digits[char_idx] |= D_CA;
+
+			last_inc_skipped=true;
+			flag_apostrophe=true;
+		}
+		else if(c=='r') {
+			// ignore this, so that \n\r does not lead to double white space.
+		}
+		else {
+			// special characters
+			uint16_t out;
+			switch(c) {
+			case ' ':
+			case '\t':
+			case '\n':
+				out=0;
+				break;
+			case '\\':
+				out=D_H | D_L;
+				break;
+			case '/':
+				out=D_N | D_J;
+				break;
+			case '_':
+				out=D_D;
+				break;
+			case '-':
+				out=D_G | D_K;
+				break;
+			case '=':
+				out=D_G | D_K | D_D;
+				break;
+			default:
+				// fallback character:
+				out=0xffff & (~D_DP) & (~D_CA);
+			}
+			lcd_vim878_digits[char_idx] |= out;
+			char_idx++;
+			last_inc_skipped=false;
+			flag_apostrophe=false;
+		}
+	}
+
+	if(!string_end_reached && (*str)=='.') {
+		lcd_vim878_digits[char_idx - 1] |= D_DP;
+	}
+
+
 }
 
 

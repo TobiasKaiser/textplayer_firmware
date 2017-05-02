@@ -40,11 +40,22 @@ void buttons_init(void)
 	GPIOB->PUPDR |= GPIO_PUPDR_PUPDR0_0;
 }
 
-enum button buttons_getkey(void) {
+enum button buttons_getkey(void)
+{
+	return buttons_getkey_timeout(0);
+}
 
-	uint32_t idr_a, idr_b, last_idr_a, last_idr_b;
-	last_idr_a=GPIOA->IDR;
-	last_idr_b=GPIOB->IDR;
+enum button buttons_getkey_timeout(int timeoutMs)
+{
+
+	int delayEndMs = systemTimeMs + timeoutMs;
+
+	uint32_t idr_a, idr_b;
+
+	static uint32_t last_idr_a=0xffff, last_idr_b=0xffff;
+	//last_idr_a=GPIOA->IDR;
+	//last_idr_b=GPIOB->IDR;
+
 	while(1) {
 		uint32_t pressed_a, pressed_b;
 		// uint32_t released_a, released_b;
@@ -57,6 +68,9 @@ enum button buttons_getkey(void) {
 		pressed_b = last_idr_b & ~idr_b;
 		//released_a = last_idr_a & ~idr_a;
 		//released_b = last_idr_b & ~idr_b;
+
+		last_idr_a=idr_a;
+		last_idr_b=idr_b;
 
 		if(pressed_a & (1<<3)) {
 			return BUTTON_UP;
@@ -78,7 +92,9 @@ enum button buttons_getkey(void) {
 		}
 
 		delay_ms(10);
-		last_idr_a=idr_a;
-		last_idr_b=idr_b;
+
+		if((timeoutMs) && (delayEndMs < systemTimeMs)) {
+			return BUTTON_NONE;
+		}
 	}
 }

@@ -3,3 +3,5 @@
 void delay_ms(int ms);
 
 extern volatile int systemTimeMs;
+
+void systick_init();

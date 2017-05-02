@@ -11,3 +11,4 @@ enum button {
 void buttons_init(void);
 
 enum button buttons_getkey(void);
+enum button buttons_getkey_timeout(int timeoutMs);
